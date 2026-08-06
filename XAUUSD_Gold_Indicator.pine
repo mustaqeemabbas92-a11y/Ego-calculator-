@@ -292,7 +292,7 @@ if (buy_signal or sell_signal) and show_lines
     lbl_sl := label.new(x=bar_index + 15, y=stop_loss, text="SL: " + str.tostring(stop_loss, "#.##"), style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
     lbl_tp1 := label.new(x=bar_index + 15, y=tp1, text="TP1: " + str.tostring(tp1, "#.##") + " (R:R " + str.tostring(rr_tp1) + ")", style=label.style_label_left, color=color.green, textcolor=color.white, size=size.small)
     lbl_tp2 := label.new(x=bar_index + 15, y=tp2, text="TP2: " + str.tostring(tp2, "#.##") + " (R:R " + str.tostring(rr_tp2) + ")", style=label.style_label_left, color=color.green, textcolor=color.white, size=size.small)
-    lbl_tp3 := label.new(x=bar_index + 15, y=tp3, text="TP3: " + str.tostring(tp3, "#.##") + " (R:R " + str.tostring(rr_tp3) + ")", style=label.style_label_left, color=color.darkgreen, textcolor=color.white, size=size.small)
+    lbl_tp3 := label.new(x=bar_index + 15, y=tp3, text="TP3: " + str.tostring(tp3, "#.##") + " (R:R " + str.tostring(rr_tp3) + ")", style=label.style_label_left, color=color.rgb(0, 100, 0), textcolor=color.white, size=size.small)
 
 // Update line endpoints to move with chart
 if not na(entry_price) and show_lines and barstate.islast

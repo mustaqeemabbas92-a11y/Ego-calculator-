@@ -1,0 +1,380 @@
+//@version=6
+indicator("XAUUSD Gold High-Probability Sniper Indicator", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// ==========================================
+// 1. INPUT PARAMETERS
+// ==========================================
+
+// Trend Confirmation (EMA)
+gp_trend = "Trend Confirmation (EMA)"
+use_ema = input.bool(true, "Use EMA Filter", group=gp_trend)
+ema_fast_len = input.int(50, "EMA Fast Period", minval=1, group=gp_trend)
+ema_slow_len = input.int(200, "EMA Slow Period", minval=1, group=gp_trend)
+
+// Momentum Confirmation (RSI)
+gp_momo = "Momentum Confirmation (RSI)"
+use_rsi = input.bool(true, "Use RSI Filter", group=gp_momo)
+rsi_len = input.int(14, "RSI Period", minval=1, group=gp_momo)
+rsi_buy_thres = input.int(55, "RSI Buy Threshold", minval=0, maxval=100, group=gp_momo)
+rsi_sell_thres = input.int(45, "RSI Sell Threshold", minval=0, maxval=100, group=gp_momo)
+
+// MACD Confirmation
+gp_macd = "MACD Confirmation"
+use_macd = input.bool(true, "Use MACD Filter", group=gp_macd)
+macd_fast = input.int(12, "MACD Fast Period", minval=1, group=gp_macd)
+macd_slow = input.int(26, "MACD Slow Period", minval=1, group=gp_macd)
+macd_signal = input.int(9, "MACD Signal Period", minval=1, group=gp_macd)
+macd_mode = input.string("Both", "MACD Mode", options=["Crossover Only", "Trend Only", "Both"], group=gp_macd, tooltip="Crossover Only: Requires fresh crossover on the last candle. Trend Only: Requires MACD line > Signal line (Buy). Both: Requires either a fresh crossover or trend alignment.")
+
+// Volume & Volatility
+gp_vol = "Volume & Volatility"
+use_volume = input.bool(true, "Use Volume filter", group=gp_vol)
+vol_ma_len = input.int(20, "Volume MA Period", minval=1, group=gp_vol)
+use_atr_filter = input.bool(true, "Use ATR Volatility Filter", group=gp_vol)
+atr_len = input.int(14, "ATR Period", minval=1, group=gp_vol)
+atr_ma_len = input.int(20, "ATR MA Period", minval=1, group=gp_vol)
+atr_multiplier = input.float(1.0, "ATR Volatility Multiplier", minval=0.1, step=0.1, group=gp_vol, tooltip="ATR must be above its MA multiplied by this factor to avoid low-volatility conditions.")
+
+// Support/Resistance & Market Structure Breakout
+gp_breakout = "Market Structure & Breakouts"
+use_breakout = input.bool(true, "Use S/R Breakout Filter", group=gp_breakout)
+breakout_lookback = input.int(15, "Breakout Lookback Bars", minval=2, group=gp_breakout, tooltip="Requires the trigger bar to break the highest high / lowest low of the last N bars.")
+
+// Smart Money Concepts (Optional Confirmations)
+gp_smc = "SMC Filter (FVG & Order Blocks)"
+use_fvg_conf = input.bool(false, "Require Unfilled FVG Confirmation", group=gp_smc, tooltip="Requires an unfilled FVG to have formed in the direction of the trade within the lookback window.")
+use_ob_conf = input.bool(false, "Require Order Block Confirmation", group=gp_smc, tooltip="Requires the trade to trigger near/from a valid Order Block.")
+smc_lookback = input.int(20, "SMC Lookback Window", minval=5, group=gp_smc)
+
+// Trade Setup & Risk Management
+gp_trade = "Trade Management & Targets"
+pip_size = input.float(0.1, "XAUUSD Pip Size (USD Points)", tooltip="On Gold, 0.10 USD is typically 1 pip (e.g. 2000.00 to 2000.10 is 1 pip). Thus 10 pips = 1.0 point.", group=gp_trade)
+sl_type = input.string("Swing High/Low", "Stop-Loss Type", options=["Swing High/Low", "ATR-based"], group=gp_trade)
+swing_lookback = input.int(7, "Swing Lookback Bars (for SL)", minval=2, group=gp_trade)
+atr_sl_mult = input.float(1.5, "ATR SL Multiplier", minval=0.5, step=0.1, group=gp_trade)
+min_sl_pips = input.int(50, "Minimum SL (Pips)", minval=10, group=gp_trade)
+
+tp1_pips = input.int(300, "Take Profit 1 (Pips)", minval=50, group=gp_trade)
+tp2_pips = input.int(400, "Take Profit 2 (Pips)", minval=50, group=gp_trade)
+tp3_pips = input.int(700, "Take Profit 3 (Pips)", minval=50, group=gp_trade)
+
+// Display & UI Options
+gp_ui = "User Interface & Display"
+show_dashboard = input.bool(true, "Show Dashboard Table", group=gp_ui)
+dashboard_pos = input.string("Top Right", "Dashboard Position", options=["Top Right", "Bottom Right", "Top Left", "Bottom Left"], group=gp_ui)
+show_lines = input.bool(true, "Show Level Lines", group=gp_ui, tooltip="Draw entry, SL, and TP lines on the chart for the active signal.")
+theme_color = input.color(color.blue, "UI Highlight Color", group=gp_ui)
+
+// ==========================================
+// 2. INDICATOR LOGIC & CALCULATIONS
+// ==========================================
+
+// EMA Calculations
+ema_fast = ta.ema(close, ema_fast_len)
+ema_slow = ta.ema(close, ema_slow_len)
+ema_buy = ema_fast > ema_slow
+ema_sell = ema_fast < ema_slow
+
+// RSI Calculations
+rsi_val = ta.rsi(close, rsi_len)
+rsi_buy = rsi_val > rsi_buy_thres
+rsi_sell = rsi_val < rsi_sell_thres
+
+// MACD Calculations
+[macd_line, signal_line, _] = ta.macd(close, macd_fast, macd_slow, macd_signal)
+macd_bull_cross = ta.crossover(macd_line, signal_line)
+macd_bear_cross = ta.crossunder(macd_line, signal_line)
+macd_bull_trend = macd_line > signal_line
+macd_bear_trend = macd_line < signal_line
+
+macd_buy = macd_mode == "Crossover Only" ? macd_bull_cross : (macd_mode == "Trend Only" ? macd_bull_trend : (macd_bull_trend or macd_bull_cross))
+macd_sell = macd_mode == "Crossover Only" ? macd_bear_cross : (macd_mode == "Trend Only" ? macd_bear_trend : (macd_bear_trend or macd_bear_cross))
+
+// Volume Calculations
+vol_ma = ta.sma(volume, vol_ma_len)
+vol_ok = volume > vol_ma
+
+// ATR Volatility Calculations
+atr_val = ta.atr(atr_len)
+atr_ma = ta.sma(atr_val, atr_ma_len)
+atr_ok = atr_val > (atr_ma * atr_multiplier)
+
+// Swing High/Low calculations for Stop-Loss
+swing_low_val = ta.lowest(low, swing_lookback)
+swing_high_val = ta.highest(high, swing_lookback)
+
+// S/R Breakout Calculations
+highest_high = ta.highest(high, breakout_lookback)[1]
+lowest_low = ta.lowest(low, breakout_lookback)[1]
+breakout_buy = close > highest_high
+breakout_sell = close < lowest_low
+
+// Smart Money Concepts (FVG & Order Block detection)
+// Fair Value Gap (FVG)
+
+
+// Check if there is any unfilled Bullish/Bearish FVG in last smc_lookback bars
+has_bull_fvg = false
+has_bear_fvg = false
+if bar_index > smc_lookback
+    for i = 1 to math.min(smc_lookback, bar_index)
+        if low[i] > high[i+2] and close[i+1] > open[i+1]
+            // check if it has been filled/mitigated since then
+            filled = false
+            for j = 0 to i - 1
+                if low[j] < high[i+2]
+                    filled := true
+                    break
+            if not filled
+                has_bull_fvg := true
+                break
+
+    for i = 1 to math.min(smc_lookback, bar_index)
+        if high[i] < low[i+2] and close[i+1] < open[i+1]
+            filled = false
+            for j = 0 to i - 1
+                if high[j] > low[i+2]
+                    filled := true
+                    break
+            if not filled
+                has_bear_fvg := true
+                break
+
+// Order Block (OB) Detection
+var float bull_ob_top = na
+var float bull_ob_bottom = na
+var float bear_ob_top = na
+var float bear_ob_bottom = na
+
+// Find last down-close bar before an upward breakout
+if ta.crossover(close, ta.highest(high, 10)[1]) and volume > vol_ma
+    // Find the last bearish candle in the last 5 bars
+    for i = 1 to 5
+        if close[i] < open[i]
+            bull_ob_top := open[i]
+            bull_ob_bottom := low[i]
+            break
+
+// Find last up-close bar before a downward breakout
+if ta.crossunder(close, ta.lowest(low, 10)[1]) and volume > vol_ma
+    // Find the last bullish candle in the last 5 bars
+    for i = 1 to 5
+        if close[i] > open[i]
+            bear_ob_top := high[i]
+            bear_ob_bottom := open[i]
+            break
+
+// Check if close is near or reacting from a recent OB
+near_bull_ob = false
+if not na(bull_ob_bottom) and not na(bull_ob_top)
+    near_bull_ob := (low >= bull_ob_bottom and low <= bull_ob_top * 1.005) or (close >= bull_ob_bottom and close <= bull_ob_top * 1.005)
+
+near_bear_ob = false
+if not na(bear_ob_bottom) and not na(bear_ob_top)
+    near_bear_ob := (high <= bear_ob_top and high >= bear_ob_bottom * 0.995) or (close <= bear_ob_top and close >= bear_ob_bottom * 0.995)
+
+
+// ==========================================
+// 3. SIGNAL CONDITIONS (NON-REPAINTING)
+// ==========================================
+
+// Core Signals (calculated on closed bars to prevent repainting)
+buy_filter = (not use_ema or ema_buy[1]) and (not use_rsi or rsi_buy[1]) and (not use_macd or macd_buy[1]) and (not use_volume or vol_ok[1]) and (not use_atr_filter or atr_ok[1]) and (not use_breakout or breakout_buy[1])
+sell_filter = (not use_ema or ema_sell[1]) and (not use_rsi or rsi_sell[1]) and (not use_macd or macd_sell[1]) and (not use_volume or vol_ok[1]) and (not use_atr_filter or atr_ok[1]) and (not use_breakout or breakout_sell[1])
+
+// Add optional SMC filters
+smc_buy_ok = (not use_fvg_conf or has_bull_fvg[1]) and (not use_ob_conf or near_bull_ob[1])
+smc_sell_ok = (not use_fvg_conf or has_bear_fvg[1]) and (not use_ob_conf or near_bear_ob[1])
+
+buy_signal = buy_filter and smc_buy_ok and barstate.isconfirmed
+sell_signal = sell_filter and smc_sell_ok and barstate.isconfirmed
+
+// ==========================================
+// 4. RISK MANAGEMENT & LEVELS
+// ==========================================
+
+// Historical states of trade signals
+var float entry_price = na
+var float stop_loss = na
+var float tp1 = na
+var float tp2 = na
+var float tp3 = na
+var string active_signal = "None" // "Buy", "Sell", "None"
+
+// Convert pips to absolute price points
+pip_points(pips) => pips * pip_size
+
+// Calculations on confirmed signal
+if buy_signal
+    entry_price := close
+    active_signal := "Buy"
+
+    // Stop Loss calculation
+    if sl_type == "Swing High/Low"
+        stop_loss := math.min(swing_low_val, entry_price - pip_points(min_sl_pips))
+    else
+        stop_loss := entry_price - (atr_val[1] * atr_sl_mult)
+        if entry_price - stop_loss < pip_points(min_sl_pips)
+            stop_loss := entry_price - pip_points(min_sl_pips)
+
+    // Take Profit calculations
+    tp1 := entry_price + pip_points(tp1_pips)
+    tp2 := entry_price + pip_points(tp2_pips)
+    tp3 := entry_price + pip_points(tp3_pips)
+
+if sell_signal
+    entry_price := close
+    active_signal := "Sell"
+
+    // Stop Loss calculation
+    if sl_type == "Swing High/Low"
+        stop_loss := math.max(swing_high_val, entry_price + pip_points(min_sl_pips))
+    else
+        stop_loss := entry_price + (atr_val[1] * atr_sl_mult)
+        if stop_loss - entry_price < pip_points(min_sl_pips)
+            stop_loss := entry_price + pip_points(min_sl_pips)
+
+    // Take Profit calculations
+    tp1 := entry_price - pip_points(tp1_pips)
+    tp2 := entry_price - pip_points(tp2_pips)
+    tp3 := entry_price - pip_points(tp3_pips)
+
+// Calculate Risk to Reward Ratios
+sl_dist = math.abs(entry_price - stop_loss)
+rr_tp1 = sl_dist > 0 ? math.round(math.abs(tp1 - entry_price) / sl_dist, 2) : 0.0
+rr_tp2 = sl_dist > 0 ? math.round(math.abs(tp2 - entry_price) / sl_dist, 2) : 0.0
+rr_tp3 = sl_dist > 0 ? math.round(math.abs(tp3 - entry_price) / sl_dist, 2) : 0.0
+
+// ==========================================
+// 5. CHART VISUALS & DRAWINGS
+// ==========================================
+
+// Plot Buy/Sell Arrows
+plotshape(buy_signal, title="Buy Signal Arrow", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.normal)
+plotshape(sell_signal, title="Sell Signal Arrow", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.normal)
+
+// Dynamic Line Drawings for Entry, SL, TPs
+var line line_entry = na
+var line line_sl = na
+var line line_tp1 = na
+var line line_tp2 = na
+var line line_tp3 = na
+
+var label lbl_entry = na
+var label lbl_sl = na
+var label lbl_tp1 = na
+var label lbl_tp2 = na
+var label lbl_tp3 = na
+
+if (buy_signal or sell_signal) and show_lines
+    // Clean old lines/labels
+    line.delete(line_entry)
+    line.delete(line_sl)
+    line.delete(line_tp1)
+    line.delete(line_tp2)
+    line.delete(line_tp3)
+
+    label.delete(lbl_entry)
+    label.delete(lbl_sl)
+    label.delete(lbl_tp1)
+    label.delete(lbl_tp2)
+    label.delete(lbl_tp3)
+
+    // Draw new lines (extend to the right)
+    line_entry := line.new(x1=bar_index, y1=entry_price, x2=bar_index + 15, y2=entry_price, color=color.blue, width=2, style=line.style_dashed)
+    line_sl := line.new(x1=bar_index, y1=stop_loss, x2=bar_index + 15, y2=stop_loss, color=color.red, width=2, style=line.style_solid)
+    line_tp1 := line.new(x1=bar_index, y1=tp1, x2=bar_index + 15, y2=tp1, color=color.green, width=1, style=line.style_dotted)
+    line_tp2 := line.new(x1=bar_index, y1=tp2, x2=bar_index + 15, y2=tp2, color=color.green, width=1, style=line.style_dotted)
+    line_tp3 := line.new(x1=bar_index, y1=tp3, x2=bar_index + 15, y2=tp3, color=color.green, width=2, style=line.style_solid)
+
+    // Draw Labels
+    lbl_entry := label.new(x=bar_index + 15, y=entry_price, text="Entry: " + str.tostring(entry_price, "#.##"), style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.small)
+    lbl_sl := label.new(x=bar_index + 15, y=stop_loss, text="SL: " + str.tostring(stop_loss, "#.##"), style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
+    lbl_tp1 := label.new(x=bar_index + 15, y=tp1, text="TP1: " + str.tostring(tp1, "#.##") + " (R:R " + str.tostring(rr_tp1) + ")", style=label.style_label_left, color=color.green, textcolor=color.white, size=size.small)
+    lbl_tp2 := label.new(x=bar_index + 15, y=tp2, text="TP2: " + str.tostring(tp2, "#.##") + " (R:R " + str.tostring(rr_tp2) + ")", style=label.style_label_left, color=color.green, textcolor=color.white, size=size.small)
+    lbl_tp3 := label.new(x=bar_index + 15, y=tp3, text="TP3: " + str.tostring(tp3, "#.##") + " (R:R " + str.tostring(rr_tp3) + ")", style=label.style_label_left, color=color.rgb(0, 100, 0), textcolor=color.white, size=size.small)
+
+// Update line endpoints to move with chart
+if not na(entry_price) and show_lines and barstate.islast
+    line.set_x2(line_entry, bar_index + 5)
+    line.set_x2(line_sl, bar_index + 5)
+    line.set_x2(line_tp1, bar_index + 5)
+    line.set_x2(line_tp2, bar_index + 5)
+    line.set_x2(line_tp3, bar_index + 5)
+
+    label.set_x(lbl_entry, bar_index + 5)
+    label.set_x(lbl_sl, bar_index + 5)
+    label.set_x(lbl_tp1, bar_index + 5)
+    label.set_x(lbl_tp2, bar_index + 5)
+    label.set_x(lbl_tp3, bar_index + 5)
+
+// ==========================================
+// 6. DASHBOARD IMPLEMENTATION
+// ==========================================
+
+var table dashboard = na
+if show_dashboard and barstate.islast
+    pos = dashboard_pos == "Top Right" ? position.top_right : (dashboard_pos == "Bottom Right" ? position.bottom_right : (dashboard_pos == "Top Left" ? position.top_left : position.bottom_left))
+    dashboard := table.new(position=pos, columns=2, rows=8, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
+
+    // Header Style
+    header_color = theme_color
+    text_c = color.white
+
+    table.cell(dashboard, 0, 0, "XAUUSD Sniper Profile", bgcolor=header_color, text_color=text_c, text_size=size.small, width=15)
+    table.cell(dashboard, 1, 0, "Value / Ratio", bgcolor=header_color, text_color=text_c, text_size=size.small, width=15)
+
+    table.cell(dashboard, 0, 1, "Active Signal", bgcolor=color.new(color.gray, 80), text_color=text_c, text_size=size.small)
+    sig_color = active_signal == "Buy" ? color.green : (active_signal == "Sell" ? color.red : color.gray)
+    table.cell(dashboard, 1, 1, active_signal, bgcolor=sig_color, text_color=text_c, text_size=size.small)
+
+    table.cell(dashboard, 0, 2, "Entry Price", bgcolor=color.new(color.gray, 80), text_color=text_c, text_size=size.small)
+    table.cell(dashboard, 1, 2, na(entry_price) ? "-" : str.tostring(entry_price, "#.##"), bgcolor=color.new(color.gray, 90), text_color=text_c, text_size=size.small)
+
+    table.cell(dashboard, 0, 3, "Stop-Loss", bgcolor=color.new(color.gray, 80), text_color=text_c, text_size=size.small)
+    table.cell(dashboard, 1, 3, na(stop_loss) ? "-" : str.tostring(stop_loss, "#.##"), bgcolor=color.new(color.gray, 90), text_color=color.red, text_size=size.small)
+
+    table.cell(dashboard, 0, 4, "Take-Profit 1", bgcolor=color.new(color.gray, 80), text_color=text_c, text_size=size.small)
+    table.cell(dashboard, 1, 4, na(tp1) ? "-" : str.tostring(tp1, "#.##") + " (R:R " + str.tostring(rr_tp1) + ")", bgcolor=color.new(color.gray, 90), text_color=color.green, text_size=size.small)
+
+    table.cell(dashboard, 0, 5, "Take-Profit 2", bgcolor=color.new(color.gray, 80), text_color=text_c, text_size=size.small)
+    table.cell(dashboard, 1, 5, na(tp2) ? "-" : str.tostring(tp2, "#.##") + " (R:R " + str.tostring(rr_tp2) + ")", bgcolor=color.new(color.gray, 90), text_color=color.green, text_size=size.small)
+
+    table.cell(dashboard, 0, 6, "Take-Profit 3", bgcolor=color.new(color.gray, 80), text_color=text_c, text_size=size.small)
+    table.cell(dashboard, 1, 6, na(tp3) ? "-" : str.tostring(tp3, "#.##") + " (R:R " + str.tostring(rr_tp3) + ")", bgcolor=color.new(color.gray, 90), text_color=color.green, text_size=size.small)
+
+    table.cell(dashboard, 0, 7, "ATR (14)", bgcolor=color.new(color.gray, 80), text_color=text_c, text_size=size.small)
+    table.cell(dashboard, 1, 7, str.tostring(atr_val, "#.##"), bgcolor=color.new(color.gray, 90), text_color=text_c, text_size=size.small)
+
+// ==========================================
+// 7. REAL-TIME ALERTS
+// ==========================================
+
+var string alert_msg_buy = ""
+var string alert_msg_sell = ""
+
+// Compute Stop-Loss values in advance to keep calculations clean
+buy_sl_temp = sl_type == "Swing High/Low" ? math.min(swing_low_val, close - pip_points(min_sl_pips)) : math.min(close - (atr_val * atr_sl_mult), close - pip_points(min_sl_pips))
+sell_sl_temp = sl_type == "Swing High/Low" ? math.max(swing_high_val, close + pip_points(min_sl_pips)) : math.max(close + (atr_val * atr_sl_mult), close + pip_points(min_sl_pips))
+
+// Construct the BUY message
+alert_msg_buy := "🚀 XAUUSD GOLD BUY SIGNAL TRIGGERED\n"
+alert_msg_buy := alert_msg_buy + "• Entry: " + str.tostring(close, "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• Stop-Loss: " + str.tostring(buy_sl_temp, "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• TP1 (300 pips): " + str.tostring(close + pip_points(tp1_pips), "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• TP2 (400 pips): " + str.tostring(close + pip_points(tp2_pips), "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• TP3 (700 pips): " + str.tostring(close + pip_points(tp3_pips), "#.##")
+
+// Construct the SELL message
+alert_msg_sell := "📉 XAUUSD GOLD SELL SIGNAL TRIGGERED\n"
+alert_msg_sell := alert_msg_sell + "• Entry: " + str.tostring(close, "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• Stop-Loss: " + str.tostring(sell_sl_temp, "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• TP1 (300 pips): " + str.tostring(close - pip_points(tp1_pips), "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• TP2 (400 pips): " + str.tostring(close - pip_points(tp2_pips), "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• TP3 (700 pips): " + str.tostring(close - pip_points(tp3_pips), "#.##")
+
+if buy_signal
+    alert(alert_msg_buy, alert.freq_once_per_bar_close)
+
+if sell_signal
+    alert(alert_msg_sell, alert.freq_once_per_bar_close)

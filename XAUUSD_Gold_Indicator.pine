@@ -350,19 +350,28 @@ if show_dashboard and barstate.islast
 // 7. REAL-TIME ALERTS
 // ==========================================
 
-alert_msg_buy = "🚀 XAUUSD GOLD BUY SIGNAL TRIGGERED\n" +
-                "• Entry: " + str.tostring(close, "#.##") + "\n" +
-                "• Stop-Loss: " + (sl_type == "Swing High/Low" ? str.tostring(math.min(swing_low_val, close - pip_points(min_sl_pips)), "#.##") : str.tostring(math.min(close - (atr_val * atr_sl_mult), close - pip_points(min_sl_pips)), "#.##")) + "\n" +
-                "• TP1 (300 pips): " + str.tostring(close + pip_points(tp1_pips), "#.##") + "\n" +
-                "• TP2 (400 pips): " + str.tostring(close + pip_points(tp2_pips), "#.##") + "\n" +
-                "• TP3 (700 pips): " + str.tostring(close + pip_points(tp3_pips), "#.##")
+var string alert_msg_buy = ""
+var string alert_msg_sell = ""
 
-alert_msg_sell = "📉 XAUUSD GOLD SELL SIGNAL TRIGGERED\n" +
-                 "• Entry: " + str.tostring(close, "#.##") + "\n" +
-                 "• Stop-Loss: " + (sl_type == "Swing High/Low" ? str.tostring(math.max(swing_high_val, close + pip_points(min_sl_pips)), "#.##") : str.tostring(math.max(close + (atr_val * atr_sl_mult), close + pip_points(min_sl_pips)), "#.##")) + "\n" +
-                 "• TP1 (300 pips): " + str.tostring(close - pip_points(tp1_pips), "#.##") + "\n" +
-                 "• TP2 (400 pips): " + str.tostring(close - pip_points(tp2_pips), "#.##") + "\n" +
-                 "• TP3 (700 pips): " + str.tostring(close - pip_points(tp3_pips), "#.##")
+// Compute Stop-Loss values in advance to keep calculations clean
+buy_sl_temp = sl_type == "Swing High/Low" ? math.min(swing_low_val, close - pip_points(min_sl_pips)) : math.min(close - (atr_val * atr_sl_mult), close - pip_points(min_sl_pips))
+sell_sl_temp = sl_type == "Swing High/Low" ? math.max(swing_high_val, close + pip_points(min_sl_pips)) : math.max(close + (atr_val * atr_sl_mult), close + pip_points(min_sl_pips))
+
+// Construct the BUY message
+alert_msg_buy := "🚀 XAUUSD GOLD BUY SIGNAL TRIGGERED\n"
+alert_msg_buy := alert_msg_buy + "• Entry: " + str.tostring(close, "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• Stop-Loss: " + str.tostring(buy_sl_temp, "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• TP1 (300 pips): " + str.tostring(close + pip_points(tp1_pips), "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• TP2 (400 pips): " + str.tostring(close + pip_points(tp2_pips), "#.##") + "\n"
+alert_msg_buy := alert_msg_buy + "• TP3 (700 pips): " + str.tostring(close + pip_points(tp3_pips), "#.##")
+
+// Construct the SELL message
+alert_msg_sell := "📉 XAUUSD GOLD SELL SIGNAL TRIGGERED\n"
+alert_msg_sell := alert_msg_sell + "• Entry: " + str.tostring(close, "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• Stop-Loss: " + str.tostring(sell_sl_temp, "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• TP1 (300 pips): " + str.tostring(close - pip_points(tp1_pips), "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• TP2 (400 pips): " + str.tostring(close - pip_points(tp2_pips), "#.##") + "\n"
+alert_msg_sell := alert_msg_sell + "• TP3 (700 pips): " + str.tostring(close - pip_points(tp3_pips), "#.##")
 
 if buy_signal
     alert(alert_msg_buy, alert.freq_once_per_bar_close)

@@ -1,0 +1,276 @@
+//@version=6
+indicator("Equal Highs & Lows Liquidity", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+
+// ==========================================
+// INPUTS & CONFIGURATION
+// ==========================================
+pivotGroup      = "Pivot Settings"
+pivotLeft       = input.int(5, title="Pivot Left Bars", minval=1, group=pivotGroup, tooltip="Number of bars to the left of the pivot point.")
+pivotRight      = input.int(5, title="Pivot Right Bars", minval=1, group=pivotGroup, tooltip="Number of bars to the right of the pivot point.")
+maxLookback     = input.int(10, title="Max Pivots Lookback", minval=2, maxval=50, group=pivotGroup, tooltip="Maximum number of historical pivots to compare against for equal level detection.")
+
+toleranceGroup  = "Liquidity Tolerance Settings"
+toleranceMode   = input.string("ATR Multiplier", title="Tolerance Calculation Mode", options=["ATR Multiplier", "Ticks / Points", "Percentage (%)"], group=toleranceGroup)
+toleranceAtr    = input.float(0.15, title="ATR Tolerance Multiplier", minval=0.01, step=0.05, group=toleranceGroup, tooltip="Max price difference as a multiplier of ATR (14).")
+tolerancePoints = input.float(20.0, title="Max Distance (Ticks/Points)", minval=0.1, step=1.0, group=toleranceGroup, tooltip="Max price difference in min ticks/points (e.g. 20 ticks = 2.0 pips on Forex/Gold).")
+tolerancePct    = input.float(0.05, title="Max Distance (%)", minval=0.001, step=0.01, group=toleranceGroup, tooltip="Max price difference as a percentage of price.")
+
+displayGroup    = "Visual & Styling Settings"
+showEQH         = input.bool(true, title="Show Equal Highs (BSL)", group=displayGroup)
+showEQL         = input.bool(true, title="Show Equal Lows (SSL)", group=displayGroup)
+colorEQH        = input.color(color.rgb(239, 83, 80), title="EQH (Buy-side Liquidity) Color", group=displayGroup)
+colorEQL        = input.color(color.rgb(38, 166, 154), title="EQL (Sell-side Liquidity) Color", group=displayGroup)
+showZones       = input.bool(true, title="Highlight Liquidity Zones (Boxes)", group=displayGroup)
+showLabels      = input.bool(true, title="Show Liquidity Labels", group=displayGroup)
+extendRight     = input.bool(true, title="Extend Lines Right Until Swept", group=displayGroup)
+hideSwept       = input.bool(false, title="Hide Swept Liquidity Pools", group=displayGroup)
+sweptColor      = input.color(color.rgb(158, 158, 158, 50), title="Swept Level Color", group=displayGroup)
+
+alertGroup      = "Alert Trigger Settings"
+alertOnEQH      = input.bool(true, title="Alert on New Equal Highs Formed", group=alertGroup)
+alertOnEQL      = input.bool(true, title="Alert on New Equal Lows Formed", group=alertGroup)
+alertOnEQHSweep = input.bool(true, title="Alert on EQH (Buy-side) Swept", group=alertGroup)
+alertOnEQLSweep = input.bool(true, title="Alert on EQL (Sell-side) Swept", group=alertGroup)
+
+// ==========================================
+// GLOBAL CALCULATIONS (PINE SCRIPT V6 COMPLIANT)
+// ==========================================
+// History-referencing functions declared in global scope
+ph = ta.pivothigh(high, pivotLeft, pivotRight)
+pl = ta.pivotlow(low, pivotLeft, pivotRight)
+atrVal = ta.atr(14)
+
+// Custom data type for Liquidity Pools
+type LiquidityPool
+    float level1
+    float level2
+    float highLevel
+    float lowLevel
+    int bar1
+    int bar2
+    bool isHigh
+    bool isSwept
+    line poolLine
+    box poolBox
+    label poolLabel
+
+// Persistent Arrays for tracking historical pivots & active pools
+var float[] phPrices = array.new_float()
+var int[]   phBars   = array.new_int()
+var float[] plPrices = array.new_float()
+var int[]   plBars   = array.new_int()
+
+var LiquidityPool[] activePools = array.new<LiquidityPool>()
+
+// Helper function to calculate maximum allowable distance between levels
+getTolerance(float priceLevel) =>
+    float tol = 0.0
+    if toleranceMode == "ATR Multiplier"
+        tol := atrVal * toleranceAtr
+    else if toleranceMode == "Ticks / Points"
+        tol := tolerancePoints * syminfo.mintick
+    else if toleranceMode == "Percentage (%)"
+        tol := priceLevel * (tolerancePct / 100.0)
+    tol
+
+// ==========================================
+// PIVOT HIGH (EQUAL HIGHS / BUY-SIDE LIQUIDITY)
+// ==========================================
+if not na(ph)
+    int pBar = bar_index - pivotRight
+    float pPrice = ph
+    float maxTol = getTolerance(pPrice)
+
+    // Check against historical pivot highs
+    int checkCount = math.min(array.size(phPrices), maxLookback)
+    if checkCount > 0
+        for i = 0 to checkCount - 1
+            float prevPrice = array.get(phPrices, i)
+            int prevBar     = array.get(phBars, i)
+
+            if math.abs(pPrice - prevPrice) <= maxTol and showEQH
+                float topVal = math.max(pPrice, prevPrice)
+                float botVal = math.min(pPrice, prevPrice)
+
+                // Draw horizontal liquidity line
+                line l = line.new(
+                     x1=prevBar, y1=topVal, x2=bar_index, y2=topVal,
+                     color=colorEQH, style=line.style_solid, width=2
+                     )
+                if extendRight
+                    line.set_extend(l, extend.none)
+
+                // Draw background zone box if enabled
+                box b = na
+                if showZones
+                    b := box.new(
+                         left=prevBar, top=topVal, right=bar_index, bottom=botVal,
+                         bgcolor=color.new(colorEQH, 85), border_color=color.new(colorEQH, 50)
+                         )
+
+                // Draw Label
+                label lbl = na
+                if showLabels
+                    lbl := label.new(
+                           x=bar_index, y=topVal,
+                           text="EQH (BSL)\n" + str.tostring(topVal, "#.####"),
+                           color=colorEQH, style=label.style_label_down,
+                           textcolor=color.white, size=size.small
+                           )
+
+                // Push new pool to active tracking list
+                LiquidityPool pool = LiquidityPool.new(prevPrice, pPrice, topVal, botVal, prevBar, pBar, true, false, l, b, lbl)
+                array.push(activePools, pool)
+
+                // Trigger Alert for EQH formation
+                if alertOnEQH
+                    string msg = "🎯 Equal Highs (Buy-side Liquidity) Formed on "
+                    msg := msg + syminfo.ticker + " at level " + str.tostring(topVal, "#.####")
+                    alert(msg, alert.freq_once_per_bar)
+
+                break // Form one match per pivot
+
+    // Store current pivot high in array history
+    array.unshift(phPrices, pPrice)
+    array.unshift(phBars, pBar)
+    if array.size(phPrices) > 50
+        array.pop(phPrices)
+        array.pop(phBars)
+
+// ==========================================
+// PIVOT LOW (EQUAL LOWS / SELL-SIDE LIQUIDITY)
+// ==========================================
+if not na(pl)
+    int pBar = bar_index - pivotRight
+    float pPrice = pl
+    float maxTol = getTolerance(pPrice)
+
+    // Check against historical pivot lows
+    int checkCount = math.min(array.size(plPrices), maxLookback)
+    if checkCount > 0
+        for i = 0 to checkCount - 1
+            float prevPrice = array.get(plPrices, i)
+            int prevBar     = array.get(plBars, i)
+
+            if math.abs(pPrice - prevPrice) <= maxTol and showEQL
+                float topVal = math.max(pPrice, prevPrice)
+                float botVal = math.min(pPrice, prevPrice)
+
+                // Draw horizontal liquidity line
+                line l = line.new(
+                     x1=prevBar, y1=botVal, x2=bar_index, y2=botVal,
+                     color=colorEQL, style=line.style_solid, width=2
+                     )
+
+                // Draw background zone box if enabled
+                box b = na
+                if showZones
+                    b := box.new(
+                         left=prevBar, top=topVal, right=bar_index, bottom=botVal,
+                         bgcolor=color.new(colorEQL, 85), border_color=color.new(colorEQL, 50)
+                         )
+
+                // Draw Label
+                label lbl = na
+                if showLabels
+                    lbl := label.new(
+                           x=bar_index, y=botVal,
+                           text="EQL (SSL)\n" + str.tostring(botVal, "#.####"),
+                           color=colorEQL, style=label.style_label_up,
+                           textcolor=color.white, size=size.small
+                           )
+
+                // Push new pool to active tracking list
+                LiquidityPool pool = LiquidityPool.new(prevPrice, pPrice, topVal, botVal, prevBar, pBar, false, false, l, b, lbl)
+                array.push(activePools, pool)
+
+                // Trigger Alert for EQL formation
+                if alertOnEQL
+                    string msg = "🎯 Equal Lows (Sell-side Liquidity) Formed on "
+                    msg := msg + syminfo.ticker + " at level " + str.tostring(botVal, "#.####")
+                    alert(msg, alert.freq_once_per_bar)
+
+                break // Form one match per pivot
+
+    // Store current pivot low in array history
+    array.unshift(plPrices, pPrice)
+    array.unshift(plBars, pBar)
+    if array.size(plPrices) > 50
+        array.pop(plPrices)
+        array.pop(plBars)
+
+// ==========================================
+// ACTIVE POOLS TRACKING & SWEEP DETECTION
+// ==========================================
+if array.size(activePools) > 0
+    for i = array.size(activePools) - 1 to 0
+        LiquidityPool p = array.get(activePools, i)
+
+        if not p.isSwept
+            // Update line and box endpoints to current bar
+            if not na(p.poolLine)
+                line.set_x2(p.poolLine, bar_index)
+            if not na(p.poolBox)
+                box.set_right(p.poolBox, bar_index)
+            if not na(p.poolLabel)
+                label.set_x(p.poolLabel, bar_index)
+
+            // Detect Equal High (Buy-side Liquidity) Sweep
+            if p.isHigh and high > p.highLevel
+                p.isSwept := true
+
+                if alertOnEQHSweep
+                    string msg = "⚡ Buy-side Liquidity (EQH Swept) on "
+                    msg := msg + syminfo.ticker + " at price " + str.tostring(high, "#.####")
+                    alert(msg, alert.freq_once_per_bar)
+
+                if hideSwept
+                    if not na(p.poolLine)
+                        line.delete(p.poolLine)
+                    if not na(p.poolBox)
+                        box.delete(p.poolBox)
+                    if not na(p.poolLabel)
+                        label.delete(p.poolLabel)
+                else
+                    if not na(p.poolLine)
+                        line.set_color(p.poolLine, sweptColor)
+                        line.set_style(p.poolLine, line.style_dashed)
+                    if not na(p.poolBox)
+                        box.set_bgcolor(p.poolBox, color.new(color.gray, 92))
+                        box.set_border_color(p.poolBox, color.new(color.gray, 80))
+                    if not na(p.poolLabel)
+                        label.set_color(p.poolLabel, sweptColor)
+                        label.set_text(p.poolLabel, "EQH Swept ✓\n" + str.tostring(p.highLevel, "#.####"))
+
+            // Detect Equal Low (Sell-side Liquidity) Sweep
+            else if not p.isHigh and low < p.lowLevel
+                p.isSwept := true
+
+                if alertOnEQLSweep
+                    string msg = "⚡ Sell-side Liquidity (EQL Swept) on "
+                    msg := msg + syminfo.ticker + " at price " + str.tostring(low, "#.####")
+                    alert(msg, alert.freq_once_per_bar)
+
+                if hideSwept
+                    if not na(p.poolLine)
+                        line.delete(p.poolLine)
+                    if not na(p.poolBox)
+                        box.delete(p.poolBox)
+                    if not na(p.poolLabel)
+                        label.delete(p.poolLabel)
+                else
+                    if not na(p.poolLine)
+                        line.set_color(p.poolLine, sweptColor)
+                        line.set_style(p.poolLine, line.style_dashed)
+                    if not na(p.poolBox)
+                        box.set_bgcolor(p.poolBox, color.new(color.gray, 92))
+                        box.set_border_color(p.poolBox, color.new(color.gray, 80))
+                    if not na(p.poolLabel)
+                        label.set_color(p.poolLabel, sweptColor)
+                        label.set_text(p.poolLabel, "EQL Swept ✓\n" + str.tostring(p.lowLevel, "#.####"))
+
+// ==========================================
+// ALERT CONDITIONS FOR TRADINGVIEW DIALOG
+// ==========================================
+alertcondition(ph and showEQH, title="New Equal Highs Formed", message="Equal Highs (Buy-side Liquidity) pool detected.")
+alertcondition(pl and showEQL, title="New Equal Lows Formed", message="Equal Lows (Sell-side Liquidity) pool detected.")

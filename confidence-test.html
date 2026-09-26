@@ -1,1 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+  <title>Confidence Test | Free Ego Calculator</title>
+
+  <meta name="description" content="Take our free confidence test to explore your self-confidence, self-awareness, and response to challenges. Get a simple personality-based result.">
+
+  <meta name="robots" content="index, follow">
+
+  <link rel="canonical" href="https://ego-calculator.vercel.app/confidence-test.html">
+
+  <meta property="og:title" content="Confidence Test | Free Ego Calculator">
+  <meta property="og:description" content="Take a free confidence test and explore confidence, self-awareness, and personality traits.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://ego-calculator.vercel.app/confidence-test.html">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f5f3ff;
+      color: #222;
+      line-height: 1.7;
+    }
+
+    header {
+      background: #6d28d9;
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0 0 15px;
+    }
+
+    nav {
+      margin-top: 15px;
+    }
+
+    nav a {
+      color: white;
+      margin: 5px 8px;
+      text-decoration: none;
+    }
+
+    main {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+
+    section {
+      background: white;
+      padding: 25px;
+      margin-bottom: 25px;
+      border-radius: 16px;
+      box-shadow: 0 3px 15px rgba(0,0,0,0.08);
+    }
+
+    h2 {
+      color: #6d28d9;
+    }
+
+    .question {
+      margin: 20px 0;
+      padding: 18px;
+      background: #fafafa;
+      border-radius: 12px;
+    }
+
+    label {
+      display: block;
+      margin: 10px 0;
+    }
+
+    button {
+      background: #6d28d9;
+      color: white;
+      border: none;
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    #result {
+      display: none;
+      margin-top: 25px;
+      padding: 20px;
+      background: #ede9fe;
+      border-radius: 12px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: #666;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>Confidence Test</h1>
+
+  <p>Explore your confidence, self-awareness, and approach to challenges.</p>
+
+  <nav>
+    <a href="/">Ego Calculator</a>
+    <a href="/personality-types.html">Personality Types</a>
+    <a href="/what-is-an-ego-calculator.html">What Is an Ego Calculator?</a>
+    <a href="/ambition-test.html">Ambition Test</a>
+  </nav>
+</header>
+
+<main>
+
+<section>
+  <h2>What Is a Confidence Test?</h2>
+
+  <p>
+    A confidence test is a simple self-assessment designed to help you
+    reflect on how you view your abilities, handle challenges, respond to
+    feedback, and interact with other people.
+  </p>
+
+  <p>
+    This test is intended for self-reflection and entertainment rather than
+    clinical diagnosis or professional psychological assessment.
+  </p>
+</section>
+
+<section>
+  <h2>Take the Free Confidence Test</h2>
+
+  <form id="confidenceForm">
+
+    <div class="question">
+      <strong>1. When facing a difficult task, how do you usually react?</strong>
+
+      <label>
+        <input type="radio" name="q1" value="3" required>
+        I believe I can handle it.
+      </label>
+
+      <label>
+        <input type="radio" name="q1" value="2">
+        I try, but I sometimes doubt myself.
+      </label>
+
+      <label>
+        <input type="radio" name="q1" value="1">
+        I usually expect that I will fail.
+      </label>
+    </div>
+
+    <div class="question">
+      <strong>2. How do you respond to constructive criticism?</strong>
+
+      <label>
+        <input type="radio" name="q2" value="3" required>
+        I listen and use it to improve.
+      </label>
+
+      <label>
+        <input type="radio" name="q2" value="2">
+        It depends on how the criticism is presented.
+      </label>
+
+      <label>
+        <input type="radio" name="q2" value="1">
+        I take criticism personally.
+      </label>
+    </div>
+
+    <div class="question">
+      <strong>3. How comfortable are you sharing your opinion?</strong>
+
+      <label>
+        <input type="radio" name="q3" value="3" required>
+        Very comfortable.
+      </label>
+
+      <label>
+        <input type="radio" name="q3" value="2">
+        Somewhat comfortable.
+      </label>
+
+      <label>
+        <input type="radio" name="q3" value="1">
+        I often avoid sharing it.
+      </label>
+    </div>
+
+    <div class="question">
+      <strong>4. When you make a mistake, what do you usually do?</strong>
+
+      <label>
+        <input type="radio" name="q4" value="3" required>
+        Accept it and learn from it.
+      </label>
+
+      <label>
+        <input type="radio" name="q4" value="2">
+        Feel embarrassed but move forward.
+      </label>
+
+      <label>
+        <input type="radio" name="q4" value="1">
+        Try to hide or avoid the mistake.
+      </label>
+    </div>
+
+    <div class="question">
+      <strong>5. How do you feel when others succeed?</strong>
+
+      <label>
+        <input type="radio" name="q5" value="3" required>
+        I feel happy for them and motivated.
+      </label>
+
+      <label>
+        <input type="radio" name="q5" value="2">
+        I sometimes compare myself with them.
+      </label>
+
+      <label>
+        <input type="radio" name="q5" value="1">
+        I often feel threatened by their success.
+      </label>
+    </div>
+
+    <button type="submit">Calculate My Confidence</button>
+
+  </form>
+
+  <div id="result"></div>
+</section>
+
+<section>
+  <h2>Understanding Your Confidence Result</h2>
+
+  <p>
+    Confidence can involve trusting your abilities while remaining open to
+    feedback and learning. A confident person does not need to be perfect;
+    confidence can coexist with uncertainty and mistakes.
+  </p>
+
+  <p>
+    Your result is based only on your answers and should be viewed as a
+    simple reflection tool rather than a scientifically validated
+    psychological measurement.
+  </p>
+</section>
+
+<section>
+  <h2>Explore More</h2>
+
+  <ul>
+    <li>
+      <a href="/">Try the Free Ego Calculator</a>
+    </li>
+    <li>
+      <a href="/personality-types.html">Explore Personality Types</a>
+    </li>
+    <li>
+      <a href="/what-is-an-ego-calculator.html">What Is an Ego Calculator?</a>
+    </li>
+    <li>
+      <a href="/ambition-test.html">Take the Ambition Test</a>
+    </li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  <p>© 2026 Ego Calculator. For self-reflection and entertainment purposes.</p>
+</footer>
+
+<script>
+document.getElementById("confidenceForm").addEventListener("submit", function(event) {
+  event.preventDefault();
+
+  let score = 0;
+
+  for (let i = 1; i <= 5; i++) {
+    score += Number(document.querySelector('input[name="q' + i + '"]:checked').value);
+  }
+
+  let title;
+  let message;
+
+  if (score >= 13) {
+    title = "High Confidence";
+    message = "Your answers suggest a strong level of self-confidence and willingness to handle challenges.";
+  } else if (score >= 9) {
+    title = "Balanced Confidence";
+    message = "Your answers suggest a moderate level of confidence with room for continued self-awareness and growth.";
+  } else {
+    title = "Developing Confidence";
+    message = "Your answers suggest that building self-trust and becoming more comfortable with challenges may be useful areas for reflection.";
+  }
+
+  const result = document.getElementById("result");
+
+  result.innerHTML =
+    "<h2>" + title + "</h2>" +
+    "<p>Your score: <strong>" + score + " / 15</strong></p>" +
+    "<p>" + message + "</p>";
+
+  result.style.display = "block";
+});
+</script>
+
+</body>
+</html>
